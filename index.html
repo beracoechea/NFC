@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Editor de Tarjetas NFC - Gestor de URLs</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.25); opacity: 0.2; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans antialiased select-none">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-100">
+          <i data-lucide="nfc" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold text-slate-900 leading-tight">NFC Web Editor</h1>
+          <p class="text-xs text-slate-500 font-medium">Lector y Gestor de URLs NDEF</p>
+        </div>
+      </div>
+      <!-- Mode Badge -->
+      <div id="deviceStatusBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span id="deviceStatusText">Web NFC</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-2xl w-full mx-auto p-4 sm:p-6 flex-1 flex flex-col gap-5">
+
+    <!-- Compatibility Alert / Notice -->
+    <div id="compatibilityBanner" class="hidden rounded-2xl bg-amber-50 border border-amber-200/80 p-4 shadow-sm">
+      <div class="flex items-start gap-3">
+        <div class="p-2 bg-amber-100 text-amber-800 rounded-xl mt-0.5 shrink-0">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <div class="flex-1 text-sm text-amber-900 space-y-1">
+          <p class="font-semibold text-amber-950">Navegador no compatible con Web NFC</p>
+          <p class="text-xs leading-relaxed text-amber-800/90">
+            La API Web NFC nativa sólo funciona en <strong>Google Chrome para Android</strong> bajo protocolo seguro (HTTPS).
+          </p>
+          <div class="pt-2 flex flex-wrap items-center gap-2">
+            <button id="toggleDemoBtn" class="text-xs font-medium px-3 py-1.5 bg-amber-200/70 hover:bg-amber-200 text-amber-900 rounded-lg transition-colors inline-flex items-center gap-1.5">
+              <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+              <span>Activar Modo Simulación</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Status & Overview Card -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs transition-all">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Estado de la tarjeta</span>
+        </div>
+        <span id="cardStatusBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+          No leída
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 mt-3">
+        <div>
+          <span class="text-xs text-slate-400 font-medium">Número de Serie (UID)</span>
+          <p id="cardSerialDisplay" class="text-sm font-mono font-bold text-slate-800 truncate mt-0.5">-- : -- : -- : --</p>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 font-medium">Total Registros</span>
+          <p id="recordsCountDisplay" class="text-sm font-semibold text-slate-800 mt-0.5">0 detectados</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons (Leer & Grabar) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-3 border-t border-slate-100">
+        <button id="readNfcBtn" class="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all focus:ring-4 focus:ring-indigo-100">
+          <i data-lucide="radio" class="w-4 h-4"></i>
+          <span>Leer Tarjeta NFC</span>
+        </button>
+        <button id="writeNfcBtn" class="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all focus:ring-4 focus:ring-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>Guardar en Tarjeta</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- URL Management Section -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-xs flex-1 flex flex-col">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">URLs en la tarjeta</h2>
+          <p class="text-xs text-slate-500">Agrega, edita o elimina las direcciones web que abrirá el chip</p>
+        </div>
+        <button id="openAddModalBtn" class="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-2 rounded-xl transition-colors">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>Nueva URL</span>
+        </button>
+      </div>
+
+      <!-- URL Items List -->
+      <div id="urlListContainer" class="flex-1 space-y-2.5 overflow-y-auto custom-scroll pr-0.5 min-h-[160px]">
+        <!-- Empty State -->
+        <div id="emptyListState" class="h-40 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-200 rounded-xl">
+          <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-2">
+            <i data-lucide="link" class="w-5 h-5"></i>
+          </div>
+          <p class="text-sm font-semibold text-slate-700">No hay URLs cargadas</p>
+          <p class="text-xs text-slate-400 max-w-xs mt-0.5">Pulsa "Leer Tarjeta NFC" para extraer las existentes o haz clic en "Nueva URL".</p>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 font-medium">
+        <span id="unsavedChangesNotice" class="hidden text-amber-600 font-semibold flex items-center gap-1">
+          <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> Cambios sin guardar
+        </span>
+        <span class="ml-auto" id="urlCounter">0 URLs preparadas</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Action Log Footer -->
+  <footer class="bg-white border-t border-slate-200 py-2.5 px-4">
+    <div class="max-w-2xl mx-auto flex items-center justify-between text-xs text-slate-500">
+      <div class="flex items-center gap-1.5 truncate">
+        <span class="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span>
+        <span id="appStatusMessage" class="truncate font-mono text-[11px]">Sistema listo para operar</span>
+      </div>
+      <button id="clearAllBtn" class="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-0.5 rounded transition">
+        Limpiar lista
+      </button>
+    </div>
+  </footer>
+
+  <!-- Scanning / Tap Overlay Modal -->
+  <div id="nfcScanOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden transition-opacity">
+    <div class="bg-white w-full max-w-xs sm:max-w-sm rounded-3xl p-6 text-center shadow-2xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- NFC Animated Wave Container -->
+      <div class="relative w-28 h-28 my-4 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full bg-indigo-400/20 animate-pulse-ring"></div>
+        <div class="w-20 h-20 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
+          <i data-lucide="radio" class="w-10 h-10"></i>
+        </div>
+      </div>
+
+      <h3 id="overlayTitle" class="text-lg font-bold text-slate-900 mt-2">Acerca la Tarjeta</h3>
+      <p id="overlayDescription" class="text-xs text-slate-500 mt-1 max-w-xs">
+        Mantén la tarjeta NFC pegada al reverso de tu teléfono hasta completar el proceso.
+      </p>
+
+      <!-- Simulated Tap Trigger (Visible in demo mode or for desktop testers) -->
+      <div id="demoTapButtonContainer" class="mt-4 pt-3 border-t border-slate-100 w-full hidden">
+        <button id="triggerDemoTapBtn" class="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl transition">
+          Simular Toque de Tarjeta 📱
+        </button>
+      </div>
+
+      <button id="cancelScanBtn" class="mt-4 w-full py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+        Cancelar
+      </button>
+    </div>
+  </div>
+
+  <!-- Add / Edit URL Modal -->
+  <div id="urlModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+            <i data-lucide="link-2" class="w-4 h-4"></i>
+          </div>
+          <h3 id="modalTitle" class="text-base font-bold text-slate-900">Añadir URL</h3>
+        </div>
+        <button id="closeModalBtn" class="text-slate-400 hover:text-slate-600 p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Etiqueta / Título (Opcional)</label>
+          <input type="text" id="urlTitleInput" placeholder="Ej: Mi Portafolio, Instagram, Menú..." class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Dirección Web (URL) *</label>
+          <input type="url" id="urlAddressInput" placeholder="https://ejemplo.com" class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+          <p id="urlErrorText" class="hidden text-xs text-red-500 mt-1 font-medium">Por favor ingresa una URL válida (con https:// o http://).</p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="cancelModalBtn" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">
+          Cancelar
+        </button>
+        <button id="saveUrlItemBtn" class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition">
+          Aceptar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toastNotification" class="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-2xl shadow-xl text-xs font-semibold transition-all transform duration-300 translate-y-12 opacity-0 pointer-events-none">
+    <i id="toastIcon" data-lucide="info" class="w-4 h-4"></i>
+    <span id="toastMessage">Acción realizada</span>
+  </div>
+
+  <!-- Application Logic -->
+  <script>
+    // State Management
+    let urls = [];
+    let isEditingIndex = -1;
+    let cardSerial = null;
+    let hasUnsavedChanges = false;
+    let isSimulatedMode = false;
+    let ndefController = null;
+    let activeOperation = null; // 'read' or 'write'
+
+    // DOM Elements
+    const compatibilityBanner = document.getElementById('compatibilityBanner');
+    const toggleDemoBtn = document.getElementById('toggleDemoBtn');
+    const deviceStatusBadge = document.getElementById('deviceStatusBadge');
+    const deviceStatusText = document.getElementById('deviceStatusText');
+    const readNfcBtn = document.getElementById('readNfcBtn');
+    const writeNfcBtn = document.getElementById('writeNfcBtn');
+    const openAddModalBtn = document.getElementById('openAddModalBtn');
+    const urlListContainer = document.getElementById('urlListContainer');
+    const emptyListState = document.getElementById('emptyListState');
+    const urlCounter = document.getElementById('urlCounter');
+    const unsavedChangesNotice = document.getElementById('unsavedChangesNotice');
+    const cardStatusBadge = document.getElementById('cardStatusBadge');
+    const cardSerialDisplay = document.getElementById('cardSerialDisplay');
+    const recordsCountDisplay = document.getElementById('recordsCountDisplay');
+    const appStatusMessage = document.getElementById('appStatusMessage');
+    const clearAllBtn = document.getElementById('clearAllBtn');
+
+    // Overlay & Modal Elements
+    const nfcScanOverlay = document.getElementById('nfcScanOverlay');
+    const overlayTitle = document.getElementById('overlayTitle');
+    const overlayDescription = document.getElementById('overlayDescription');
+    const cancelScanBtn = document.getElementById('cancelScanBtn');
+    const demoTapButtonContainer = document.getElementById('demoTapButtonContainer');
+    const triggerDemoTapBtn = document.getElementById('triggerDemoTapBtn');
+
+    const urlModal = document.getElementById('urlModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const urlTitleInput = document.getElementById('urlTitleInput');
+    const urlAddressInput = document.getElementById('urlAddressInput');
+    const urlErrorText = document.getElementById('urlErrorText');
+    const saveUrlItemBtn = document.getElementById('saveUrlItemBtn');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const cancelModalBtn = document.getElementById('cancelModalBtn');
+
+    const toastNotification = document.getElementById('toastNotification');
+    const toastIcon = document.getElementById('toastIcon');
+    const toastMessage = document.getElementById('toastMessage');
+
+    // Verification of Web NFC Support
+    function checkNfcSupport() {
+      const isSupported = ("NDEFReader" in window);
+      if (!isSupported) {
+        compatibilityBanner.classList.remove('hidden');
+        setDemoMode(true);
+      } else {
+        deviceStatusBadge.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
+        deviceStatusText.textContent = "Web NFC Activo";
+        logStatus("Web NFC detectado y listo para escanear");
+      }
+    }
+
+    function setDemoMode(enable) {
+      isSimulatedMode = enable;
+      if (isSimulatedMode) {
+        deviceStatusBadge.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200";
+        deviceStatusText.textContent = "Modo Demo";
+        demoTapButtonContainer.classList.remove('hidden');
+        logStatus("Ejecutando en modo de simulación (no requiere Chrome Android)");
+      } else {
+        deviceStatusBadge.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200";
+        deviceStatusText.textContent = "Web NFC";
+        demoTapButtonContainer.classList.add('hidden');
+      }
+    }
+
+    toggleDemoBtn.addEventListener('click', () => {
+      setDemoMode(!isSimulatedMode);
+      showToast(isSimulatedMode ? "Modo Simulación Habilitado" : "Modo Nativo Habilitado", "info");
+    });
+
+    // Logging & Toast Utilities
+    function logStatus(msg) {
+      if (appStatusMessage) appStatusMessage.textContent = msg;
+    }
+
+    function showToast(message, type = "success") {
+      toastNotification.className = "fixed bottom-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-2xl shadow-xl text-xs font-semibold transition-all transform duration-300";
+      
+      if (type === "success") {
+        toastNotification.classList.add("bg-emerald-800", "text-white");
+        toastIcon.setAttribute("data-lucide", "check-circle");
+      } else if (type === "error") {
+        toastNotification.classList.add("bg-red-800", "text-white");
+        toastIcon.setAttribute("data-lucide", "alert-circle");
+      } else {
+        toastNotification.classList.add("bg-slate-800", "text-white");
+        toastIcon.setAttribute("data-lucide", "info");
+      }
+
+      toastMessage.textContent = message;
+      lucide.createIcons();
+      toastNotification.classList.remove("translate-y-12", "opacity-0", "pointer-events-none");
+
+      setTimeout(() => {
+        toastNotification.classList.add("translate-y-12", "opacity-0", "pointer-events-none");
+      }, 3500);
+    }
+
+    // Modal Operations
+    function openModal(editIndex = -1) {
+      isEditingIndex = editIndex;
+      urlErrorText.classList.add('hidden');
+
+      if (editIndex >= 0) {
+        modalTitle.textContent = "Editar URL";
+        urlTitleInput.value = urls[editIndex].title || "";
+        urlAddressInput.value = urls[editIndex].url || "";
+      } else {
+        modalTitle.textContent = "Añadir URL";
+        urlTitleInput.value = "";
+        urlAddressInput.value = "https://";
+      }
+
+      urlModal.classList.remove('hidden');
+      urlAddressInput.focus();
+    }
+
+    function closeModal() {
+      urlModal.classList.add('hidden');
+    }
+
+    openAddModalBtn.addEventListener('click', () => openModal(-1));
+    closeModalBtn.addEventListener('click', closeModal);
+    cancelModalBtn.addEventListener('click', closeModal);
+
+    // Save URL from Modal
+    saveUrlItemBtn.addEventListener('click', () => {
+      let enteredUrl = urlAddressInput.value.trim();
+      const enteredTitle = urlTitleInput.value.trim();
+
+      // Basic URL verification
+      if (!enteredUrl.startsWith('http://') && !enteredUrl.startsWith('https://')) {
+        enteredUrl = 'https://' + enteredUrl;
+      }
+
+      try {
+        new URL(enteredUrl);
+      } catch (e) {
+        urlErrorText.classList.remove('hidden');
+        return;
+      }
+
+      if (isEditingIndex >= 0) {
+        urls[isEditingIndex] = {
+          title: enteredTitle || enteredUrl,
+          url: enteredUrl
+        };
+        showToast("URL actualizada correctamente");
+      } else {
+        urls.push({
+          title: enteredTitle || enteredUrl,
+          url: enteredUrl
+        });
+        showToast("URL añadida a la lista");
+      }
+
+      markUnsavedChanges();
+      renderUrls();
+      closeModal();
+    });
+
+    // Render URL List in DOM
+    function renderUrls() {
+      urlListContainer.innerHTML = '';
+
+      if (urls.length === 0) {
+        urlListContainer.appendChild(emptyListState);
+        emptyListState.classList.remove('hidden');
+      } else {
+        emptyListState.classList.add('hidden');
+
+        urls.forEach((item, index) => {
+          const itemEl = document.createElement('div');
+          itemEl.className = "flex items-center justify-between p-3 rounded-xl border border-slate-200/90 bg-white hover:border-slate-300 transition-all shadow-2xs group";
+          
+          itemEl.innerHTML = `
+            <div class="flex items-center gap-3 min-w-0 pr-2">
+              <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <i data-lucide="globe" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0">
+                <h4 class="text-xs font-bold text-slate-800 truncate">${escapeHtml(item.title || item.url)}</h4>
+                <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="text-[11px] text-indigo-600 hover:underline truncate block">
+                  ${escapeHtml(item.url)}
+                </a>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="editUrl(${index})" title="Editar" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteUrl(${index})" title="Eliminar" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          `;
+          urlListContainer.appendChild(itemEl);
+        });
+      }
+
+      urlCounter.textContent = `${urls.length} URL${urls.length === 1 ? '' : 's'} preparadas`;
+      lucide.createIcons();
+    }
+
+    window.editUrl = function(index) {
+      openModal(index);
+    };
+
+    window.deleteUrl = function(index) {
+      urls.splice(index, 1);
+      markUnsavedChanges();
+      renderUrls();
+      showToast("URL eliminada de la lista", "info");
+    };
+
+    function markUnsavedChanges() {
+      hasUnsavedChanges = true;
+      unsavedChangesNotice.classList.remove('hidden');
+    }
+
+    function clearUnsavedChanges() {
+      hasUnsavedChanges = false;
+      unsavedChangesNotice.classList.add('hidden');
+    }
+
+    clearAllBtn.addEventListener('click', () => {
+      if (urls.length === 0) return;
+      urls = [];
+      markUnsavedChanges();
+      renderUrls();
+      showToast("Lista vaciada", "info");
+    });
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // Scanning Overlay Handlers
+    function showScanningOverlay(mode) {
+      activeOperation = mode;
+      if (mode === 'read') {
+        overlayTitle.textContent = "Leyendo Tarjeta NFC";
+        overlayDescription.textContent = "Acerca la tarjeta a la parte trasera de tu teléfono para escanear sus URLs.";
+      } else {
+        overlayTitle.textContent = "Guardando en Tarjeta";
+        overlayDescription.textContent = `Acerca la tarjeta para escribir ${urls.length} URL(s) en la memoria NDEF.`;
+      }
+
+      nfcScanOverlay.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function hideScanningOverlay() {
+      if (ndefController) {
+        try {
+          ndefController.abort();
+        } catch(e) {}
+        ndefController = null;
+      }
+      activeOperation = null;
+      nfcScanOverlay.classList.add('hidden');
+    }
+
+    cancelScanBtn.addEventListener('click', () => {
+      hideScanningOverlay();
+      logStatus("Operación NFC cancelada por el usuario");
+    });
+
+    // Native Web NFC: Read Procedure
+    async function startNfcScan() {
+      if (isSimulatedMode || !("NDEFReader" in window)) {
+        showScanningOverlay('read');
+        return;
+      }
+
+      try {
+        ndefController = new AbortController();
+        const ndef = new NDEFReader();
+        
+        showScanningOverlay('read');
+        logStatus("Iniciando sensor NFC para lectura...");
+
+        await ndef.scan({ signal: ndefController.signal });
+
+        ndef.onreadingerror = () => {
+          showToast("Error de lectura: no se pudo decodificar el tag", "error");
+          logStatus("Fallo de lectura NDEF");
+        };
+
+        ndef.onreading = (event) => {
+          handleNfcReadingEvent(event);
+          hideScanningOverlay();
+        };
+
+      } catch (err) {
+        hideScanningOverlay();
+        logStatus("Error: " + err.message);
+        showToast("Error al iniciar lector: " + err.message, "error");
+      }
+    }
+
+    // Parse Records from NFC Event
+    function handleNfcReadingEvent(event) {
+      const serial = event.serialNumber || "No disponible";
+      cardSerial = serial;
+      cardSerialDisplay.textContent = serial;
+      cardStatusBadge.textContent = "Leída con éxito";
+      cardStatusBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800";
+
+      const message = event.message;
+      const extractedUrls = [];
+      let totalRecords = 0;
+
+      if (message && message.records) {
+        totalRecords = message.records.length;
+        const textDecoder = new TextDecoder();
+
+        for (const record of message.records) {
+          if (record.recordType === "url") {
+            const rawUrl = textDecoder.decode(record.data);
+            extractedUrls.push({
+              title: rawUrl,
+              url: rawUrl
+            });
+          } else if (record.recordType === "text") {
+            const textContent = textDecoder.decode(record.data);
+            if (textContent.startsWith("http://") || textContent.startsWith("https://")) {
+              extractedUrls.push({
+                title: textContent,
+                url: textContent
+              });
+            }
+          }
+        }
+      }
+
+      recordsCountDisplay.textContent = `${totalRecords} registros (${extractedUrls.length} URLs)`;
+      urls = extractedUrls;
+      clearUnsavedChanges();
+      renderUrls();
+
+      showToast(`¡Tarjeta leída! Se obtuvieron ${extractedUrls.length} URL(s)`);
+      logStatus(`UID ${serial} procesado con éxito.`);
+    }
+
+    // Native Web NFC: Write Procedure
+    async function startNfcWrite() {
+      if (urls.length === 0) {
+        showToast("No hay ninguna URL en la lista para escribir", "error");
+        return;
+      }
+
+      if (isSimulatedMode || !("NDEFReader" in window)) {
+        showScanningOverlay('write');
+        return;
+      }
+
+      try {
+        ndefController = new AbortController();
+        const ndef = new NDEFReader();
+
+        showScanningOverlay('write');
+        logStatus("Esperando aproximación de tarjeta para escribir...");
+
+        // Formulate NDEF records array
+        const ndefRecords = urls.map(item => ({
+          recordType: "url",
+          data: item.url
+        }));
+
+        await ndef.write({ records: ndefRecords }, { signal: ndefController.signal });
+
+        hideScanningOverlay();
+        clearUnsavedChanges();
+        cardStatusBadge.textContent = "Actualizada";
+        cardStatusBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800";
+        showToast(`¡Listo! Se grabaron ${urls.length} URLs en la tarjeta`);
+        logStatus("Escritura NDEF finalizada con éxito.");
+
+      } catch (err) {
+        hideScanningOverlay();
+        logStatus("Error de escritura: " + err.message);
+        showToast("Error de escritura: " + err.message, "error");
+      }
+    }
+
+    // Simulation Trigger (Tap Simulator)
+    triggerDemoTapBtn.addEventListener('click', () => {
+      if (activeOperation === 'read') {
+        const dummySerial = "04:" + Array.from({length: 6}, () => Math.floor(Math.random()*256).toString(16).padStart(2, '0').toUpperCase()).join(':');
+        const dummyData = [
+          { title: "Sitio Web Principal", url: "https://mi-empresa.com" },
+          { title: "LinkedIn Profesional", url: "https://linkedin.com/in/usuario-demo" }
+        ];
+
+        cardSerial = dummySerial;
+        cardSerialDisplay.textContent = dummySerial;
+        cardStatusBadge.textContent = "Leída (Simulación)";
+        cardStatusBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800";
+        recordsCountDisplay.textContent = `2 registros detectados`;
+        
+        urls = dummyData;
+        clearUnsavedChanges();
+        renderUrls();
+
+        hideScanningOverlay();
+        showToast("Tarjeta simulada leída con éxito");
+        logStatus("Lectura de demostración completada con 2 URLs");
+
+      } else if (activeOperation === 'write') {
+        hideScanningOverlay();
+        clearUnsavedChanges();
+        cardStatusBadge.textContent = "Grabada (Simulación)";
+        cardStatusBadge.className = "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800";
+        showToast(`Se grabaron ${urls.length} URLs (Simulación)`);
+        logStatus("Escritura simulada completada exitosamente");
+      }
+    });
+
+    // Event Listeners
+    readNfcBtn.addEventListener('click', startNfcScan);
+    writeNfcBtn.addEventListener('click', startNfcWrite);
+
+    // Initialization
+    window.addEventListener('load', () => {
+      checkNfcSupport();
+      renderUrls();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
